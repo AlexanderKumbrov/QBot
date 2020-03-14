@@ -1,86 +1,126 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-# vim:fileencoding=utf-8
-import telebot
 import datetime
-from datetime import timedelta
-from threading import Thread
+import asyncio
 import time
-import schedule
 import telegram.ext
-from telegram.ext import Updater, Job
- 
+import mysql.connector
+import pymysql.cursors
+from datetime import timedelta
+from telegram.ext import Updater , Job
+from aiohttp import web
+from aiogram import Bot , types
+from aiogram.dispatcher import Dispatcher
+from aiogram.utils.executor import start_polling
 
-bot = telebot.TeleBot('TOKEN')
+bot = Bot('API_TOKEN')
+dBot = Dispatcher(bot)
+
+db = pymysql.connect("NAMESERV" , "USER" , "PASS" , "NAMEDB")
+cursor = db.cursor()
+sql = "SELECT*FROM NAMETABLE"
 
 now = datetime.datetime.now
-chats_id = [chats_id]
+chats_id = [USERID  ]
 
 
-@bot.message_handler(commands=['start'])
-def startMessage(message):
-    bot.send_message(message.chat.id , "Hi!")
 
-@bot.message_handler(commands=['verify'])
 
-def verify_messages(message):
-    msg(False ,message.chat.id )
+@dBot.message_handler(commands=['start'])
+async def startMessage(message: types.Message):
+   await bot.send_message(message.chat.id , "Hi!")
 
-@bot.message_handler(content_types=["text"])
-def message_handler(message):
+
+@dBot.message_handler(content_types=["text"])
+async def message_handler(message: types.Message):
     msg = ''
     s = message.text
     if len(s)<4:
         
-        bot.send_message(message.chat.id , "Введите больше информации")
+        await bot.send_message(message.chat.id , "Введите больше информации")
     else:
-        fileHandle = open(r'', 'r' ,encoding="utf-8")
-        for line in fileHandle:
-            fields = line.split('|')
-            if s in fields[0]:
-                if fields[1]=='':
-                    msg =  fields[0]+'\n'+'Номер отсутствует!'
+        
+        cursor.execute(sql)
+        results = cursor.fetchall()
+        for row in results:
+            name = row[1]
+            if s in name:
+                if row[2]=='':
+                    msg =  row[1]+'\n'+'Номер отсутствует!'
                 else:
-                    msg =  fields[0]+'\n'+' +996'+fields[1]
-                bot.send_message(message.chat.id , msg)
+                    msg =  row[1]+'\n'+' +996'+str(row[2])
+                await bot.send_message(message.chat.id , msg)
+   
+@dBot.message_handler(commands=['verify'])
+async def verifyMessage(message:types.message):
+    await msg(False, message.chat.id )
 
-        fileHandle.close()
-        if msg == '':
-            msg = 'Не найдено !'
-            bot.send_message(message.chat.id , msg)
 
+async def handle(request):
+    if request.method=="POST":
+        text = "POSTOK "
+        print("POST")
+        return web.Response(text=text)
+    elif request.method=="GET":
+        text= "OK"
+    await msg(True)
+    return web.Response(text=text)
 
-def msg(shed , chat_id = 0):
+def printmsg():
+    print("message ")
     
-    date = datetime.date.today()
-    fDate = date + timedelta(days=1)
-    mess = ''
+     
+async def msg( ver,chat_id = 0):
+    
+    cursor.execute(sql)
+    result = cursor.fetchall()
+    yDate = datetime.date.today()
+    fDate = yDate + timedelta(days=1)
     a = fDate.strftime("%d.%m")
-    fileHandler = open(r'', 'r' ,encoding="utf-8")
-    for line in fileHandler:
-        fields = line.split("|")
-        if a in fields[2]:
-            if fields[1]=='':
-                mess = fields[0] + "\n " + fields[2] + '\n Отсутствует номер'
+    b = yDate.strftime("%d.%m")
+    mess = ''
+    for row in result:  
+        # print(str(number))
+            
+        # print(b)
+           
+        if a in row[3]:
+            if row[2]==0:
+                mess = row[1] + "\n " + 'Номер отсутствует \n'+ row[3]
             else:
-                mess = fields[0] + "\n " + fields[2] + "\n +996 " + fields[1]
-            if shed ==True:
+                mess = row[1] + "\n " + row[3] + "\n +996 " + str(row[2])
+                    
+            if ver ==True:
                 for id in chats_id:
-                    print(id)
-                    bot.send_message(id, "Завтра день рождение : " + mess)
+                    await bot.send_message(id, "MESSAGE : " + mess)
             else:
-                bot.send_message(chat_id, "Завтра день рождение : " + mess)
-    fileHandler.close()
+                await bot.send_message(chat_id, "MESSAGE : " + mess)
+        if b in row[3]:
+            if row[2]==0:
+                mess = row[1] + "\n " + 'MESSAGE \n'+ row[3]
+            else:
+                mess = row[1] + "\n " + row[3] + "\n +996 " + str(row[2])
+                    
+            if ver ==True:
+                for id in chats_id:
+                    await bot.send_message(id, "MESSAGE : " + mess)
+            else:
+                await bot.send_message(chat_id, "MESSAGE : " + mess)
+    
+async def startServ():
+    server = web.Server(handle)
+    runner = web.ServerRunner(server)
+    await runner.setup()
+    site = web.TCPSite(runner , '0.0.0.0' , 8080)
+    await site.start()
+    print("STARTING SERVER")
+
+loop = asyncio.get_event_loop()
+try:
+    loop.run_until_complete(startServ())
+    loop.run_until_complete(start_polling(dBot , loop=loop , skip_updates=True))
+except KeyboardInterrupt:
+    pass
+loop.close()
+
+    
 
 
-
-def execute_me():
-    schedule.every().day.at("10:00").do(msg , True)
-    while True:
-        schedule.run_pending()
-        time.sleep(0)
-
-thread1 = Thread(target=execute_me)
-thread1.start()
-
-bot.polling(none_stop=True, interval=0)
