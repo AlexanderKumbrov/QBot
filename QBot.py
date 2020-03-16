@@ -3,20 +3,23 @@ import asyncio
 import time
 import telegram.ext
 import mysql.connector
+import logging
+import json
 import pymysql.cursors
 from datetime import timedelta
 from telegram.ext import Updater , Job
+import aiohttp 
 from aiohttp import web
 from aiogram import Bot , types
 from aiogram.dispatcher import Dispatcher
 from aiogram.utils.executor import start_polling
 
-bot = Bot('API_TOKEN')
+bot = Bot('TOKEN')
 dBot = Dispatcher(bot)
 
-db = pymysql.connect("NAMESERV" , "USER" , "PASS" , "NAMEDB")
+db = pymysql.connect("ADRESSBD" , "USER" , "PASSWORD" , "DB")
 cursor = db.cursor()
-sql = "SELECT*FROM NAMETABLE"
+sql = "SELECT*FROM table"
 
 now = datetime.datetime.now
 chats_id = [USERID  ]
@@ -26,7 +29,13 @@ chats_id = [USERID  ]
 
 @dBot.message_handler(commands=['start'])
 async def startMessage(message: types.Message):
-   await bot.send_message(message.chat.id , "Hi!")
+    await bot.send_message(message.chat.id , "Hello")
+
+@dBot.message_handler(commands=['verify'])
+async def verifyMessage(message: types.Message):
+    await msg(False, message.chat.id )
+    print(message.chat.id)
+
 
 
 @dBot.message_handler(content_types=["text"])
@@ -48,24 +57,32 @@ async def message_handler(message: types.Message):
                 else:
                     msg =  row[1]+'\n'+' +996'+str(row[2])
                 await bot.send_message(message.chat.id , msg)
-   
-@dBot.message_handler(commands=['verify'])
-async def verifyMessage(message:types.message):
-    await msg(False, message.chat.id )
 
 
 async def handle(request):
     if request.method=="POST":
         text = "POSTOK "
+    
+        jsonResult = await request.text()   
+        
+        js = json.loads(jsonResult)
+
+        cursor.execute(sql)
+        result = cursor.fetchall()
+        for row in result:
+            if row[1] == js["name"]:
+                sqlinsert = "UPDATE `DB`.`table` SET `FirstName` = '"+js["phone"]+"', `date` = '"+js["bdate"]+"' WHERE name = '"+js["name"]+"' ;"
+            else:
+                sqlinsert= "INSERT INTO `DB`.`table` (`Name`, `FirstName`, `date`) VALUES ('"+js["name"]+"', '"+js["phone"]+"', '"+js["bdate"]+"');"
+        cursor.execute(sqlinsert)
+        db.commit()
         print("POST")
         return web.Response(text=text)
     elif request.method=="GET":
         text= "OK"
-    await msg(True)
-    return web.Response(text=text)
+        await msg(True)
+        return web.Response(text=text)
 
-def printmsg():
-    print("message ")
     
      
 async def msg( ver,chat_id = 0):
@@ -76,12 +93,9 @@ async def msg( ver,chat_id = 0):
     fDate = yDate + timedelta(days=1)
     a = fDate.strftime("%d.%m")
     b = yDate.strftime("%d.%m")
-    mess = ''
+    mess = ''                  
     for row in result:  
-        # print(str(number))
-            
-        # print(b)
-           
+     
         if a in row[3]:
             if row[2]==0:
                 mess = row[1] + "\n " + 'Номер отсутствует \n'+ row[3]
@@ -90,26 +104,26 @@ async def msg( ver,chat_id = 0):
                     
             if ver ==True:
                 for id in chats_id:
-                    await bot.send_message(id, "MESSAGE : " + mess)
+                    await bot.send_message(id, "Завтра день рождение : " + mess)
             else:
-                await bot.send_message(chat_id, "MESSAGE : " + mess)
+                await bot.send_message(chat_id, "Завтра день рождение : " + mess)
         if b in row[3]:
             if row[2]==0:
-                mess = row[1] + "\n " + 'MESSAGE \n'+ row[3]
+                mess = row[1] + "\n " + 'Номер отсутствует \n'+ row[3]
             else:
                 mess = row[1] + "\n " + row[3] + "\n +996 " + str(row[2])
                     
             if ver ==True:
                 for id in chats_id:
-                    await bot.send_message(id, "MESSAGE : " + mess)
+                    await bot.send_message(id, "Сегодня день рождение : " + mess)
             else:
-                await bot.send_message(chat_id, "MESSAGE : " + mess)
+                await bot.send_message(chat_id, "Сегодня день рождение : " + mess)
     
 async def startServ():
     server = web.Server(handle)
     runner = web.ServerRunner(server)
     await runner.setup()
-    site = web.TCPSite(runner , '0.0.0.0' , 8080)
+    site = web.TCPSite(runner , 'localhost' , 8080)
     await site.start()
     print("STARTING SERVER")
 
@@ -120,7 +134,4 @@ try:
 except KeyboardInterrupt:
     pass
 loop.close()
-
-    
-
 
